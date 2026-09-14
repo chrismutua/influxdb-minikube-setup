@@ -1,8 +1,8 @@
-# 📊 Local Minikube & Argo CD Monitoring Stack
+# 📊 Local Minikube Monitoring Stack
 
-This repository contains the configuration to monitor a local Minikube cluster (running Argo CD) using **Telegraf** as the metrics collector, **InfluxDB** as the time-series database, and **Grafana** for visualization.
+This repository contains the configuration to monitor a local Minikube cluster using **Telegraf** as the metrics collector, **InfluxDB** as the time-series database, and **Grafana** for visualization.
 
-The architecture is designed to run entirely on a local machine without requiring any cloud resources.
+The architecture is designed to run entirely on a local machine without requiring any cloud resources. The setup is agnostic to the workloads running on the cluster, meaning it will automatically collect metrics for any pods deployed to Minikube.
 
 ## 🏗️ Architecture
 
@@ -17,7 +17,7 @@ The Telegraf pods communicate with the host machine's InfluxDB using the Minikub
 ## 📋 Prerequisites
 
 *   Minikube installed and running.
-*   Argo CD deployed in the cluster (namespace `argo-cd`).
+*   Workloads deployed in the cluster that you want to monitor.
 *   InfluxDB v2.x installed and running on the host machine (port `8086`).
 *   Grafana installed and running on the host machine.
 *   `kubectl` CLI configured to talk to your Minikube cluster.
@@ -34,24 +34,24 @@ By default, the Minikube Kubelet does not trust Kubernetes Service Account token
 minikube stop
 minikube start --extra-config=kubelet.authentication-token-webhook=true
 ```
-*(Note: Restarting Minikube will restart your Argo CD pods, but they will automatically reconcile to their desired state.)*
+*(Note: Restarting Minikube will restart your workloads, but Kubernetes controllers will automatically reconcile them back to their desired state.)*
 
 ### Step 2: Prepare InfluxDB
 
 1.  Ensure InfluxDB is running on your host machine.
-2.  Create an organization (e.g., `cmutua-org`) and a bucket named `telegraf`.
+2.  Create an organization (e.g., `<YOUR_INFLUXDB_ORG>`) and a bucket named `telegraf`.
 3.  Generate an **API Token** with **Write** permissions for the `telegraf` bucket. You will need this for the next step.
 
 ### Step 3: Create the Kubernetes Secret
 
 To avoid hardcoding sensitive credentials in the manifest (making it safe to commit to Git), we store the InfluxDB token and organization in a Kubernetes Secret.
 
-Run the following command in your terminal, replacing `<YOUR_INFLUXDB_TOKEN>` with your actual token:
+Run the following command in your terminal, replacing `<YOUR_INFLUXDB_TOKEN>` and `<YOUR_INFLUXDB_ORG>` with your actual values:
 
 ```bash
 kubectl create secret generic telegraf-influxdb-secret \
   --from-literal=INFLUXDB_TOKEN='<YOUR_INFLUXDB_TOKEN>' \
-  --from-literal=INFLUXDB_ORG='cmutua-org' \
+  --from-literal=INFLUXDB_ORG='<YOUR_INFLUXDB_ORG>' \
   -n monitoring
 ```
 
@@ -101,7 +101,7 @@ kubectl exec -it <pod-name> -n monitoring -- telegraf --config /etc/telegraf/tel
 2.  Select your InfluxDB data source.
 3.  Change the **Query Language** from `Flux` to `InfluxQL`.
 4.  Fill in the authentication:
-    *   **User**: Your InfluxDB username (e.g., `cmutua`).
+    *   **User**: Your InfluxDB username (e.g., `<YOUR_USERNAME>`).
     *   **Password**: Paste your **InfluxDB API Token** here (not your user password).
     *   **Database**: `telegraf`.
 5.  Click **Save & Test**.
@@ -113,7 +113,7 @@ influx v1 dbrp create \
   --bucket-id <your-bucket-id> \
   --db telegraf \
   --rp autogen \
-  --org cmutua-org \
+  --org <YOUR_INFLUXDB_ORG> \
   --token <your-api-token>
 ```
 
