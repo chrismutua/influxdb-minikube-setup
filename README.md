@@ -133,5 +133,3 @@ Once the data source is connected, you can build dashboards using your preferred
 ## 🔐 Security Note for GitOps
 
 This setup uses a standard Kubernetes Secret for local testing. **Base64 is not encryption.** If you commit a standard Secret manifest to GitHub, your token is exposed.
-
-For a production GitOps setup, use **Bitnami Sealed Secrets** or **SOPS**. This allows you to commit encrypted secrets to Git, which are decrypted by a controller inside the cluster.
