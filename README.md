@@ -91,31 +91,17 @@ kubectl exec -it <pod-name> -n monitoring -- telegraf --config /etc/telegraf/tel
 
 ## 📊 Grafana Configuration
 
-### Query Language: Flux vs. InfluxQL
+To visualize the metrics, you need to add InfluxDB as a data source in Grafana. 
 
-*   **Flux**: The native query language for InfluxDB 2.x. It requires writing code.
-*   **InfluxQL**: The older query language. It supports a **Visual Query Builder** in Grafana, which is what you want for the UI dropdowns.
-
-**To use the Visual Builder in Grafana:**
 1.  Go to **Connections -> Data Sources** in Grafana.
-2.  Select your InfluxDB data source.
-3.  Change the **Query Language** from `Flux` to `InfluxQL`.
-4.  Fill in the authentication:
-    *   **User**: Your InfluxDB username.
-    *   **Password**: Paste your **InfluxDB API Token** here (not your user password).
-    *   **Database**: `telegraf`.
-5.  Click **Save & Test**.
+2.  Select **InfluxDB**.
+3.  Configure the connection settings:
+    *   **URL**: `http://localhost:8086` (or the address where InfluxDB is running).
+    *   **Authentication**: Ensure the token or credentials used have **Read** permissions for the `telegraf` bucket.
+    *   **Database/Bucket**: `telegraf`.
+4.  Click **Save & Test**.
 
-**Important for InfluxDB 2.x:** You must create a DBRP (Database Retention Policy) mapping for InfluxQL to work. Run this command on your host machine:
-
-```bash
-influx v1 dbrp create \
-  --bucket-id <your-bucket-id> \
-  --db telegraf \
-  --rp autogen \
-  --org <YOUR_INFLUXDB_ORG> \
-  --token <your-api-token>
-```
+Once the data source is connected, you can build dashboards using your preferred query language (Flux or InfluxQL) to visualize the Kubernetes metrics collected by Telegraf.
 
 ---
 
@@ -146,10 +132,11 @@ influx v1 dbrp create \
 **Fix:** Wrap the command in a shell script or use `bash -c "..."`.
 
 ### 6. Grafana "No Results" for Kubernetes Metrics
-**Cause:** Overly strict metric filtering or querying the wrong bucket.
+**Cause:** Incorrect data source configuration or querying the wrong time range.
 **Fix:**
-*   Comment out `fieldinclude` temporarily to ensure data flows.
-*   Query InfluxDB directly with: `from(bucket: "telegraf") |> range(start: -15m) |> filter(fn: (r) => r._measurement =~ /kubernetes/)`
+*   Verify that the Grafana data source is pointing to the correct bucket (`telegraf`).
+*   Check that the dashboard's time range covers a period when Telegraf was actively collecting and sending data.
+*   Temporarily comment out the `fieldinclude` option in the Telegraf ConfigMap to ensure all metrics are flowing without filtering.
 
 ---
 
