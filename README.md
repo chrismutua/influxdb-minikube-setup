@@ -121,17 +121,7 @@ Once the data source is connected, you can build dashboards using your preferred
 **Cause:** Telegraf v1.40.0 removed the `fieldpass` option in favor of `fieldinclude`.
 **Fix:** Replace `fieldpass` with `fieldinclude` in the `telegraf.conf` ConfigMap.
 
-### 4. Missing `n_users` Metric (Host Machine Monitoring)
-**Cause:** Some modern Linux distributions no longer use or populate `/var/run/utmp`. Telegraf's `system` plugin cannot read it.
-**Fix:** Use the `exec` plugin with `loginctl` or `who` to count unique logged-in users.
-*   *Script:* `loginctl list-sessions --no-legend | awk '{print $3}' | sort -u | wc -l`
-*   *Config:* Use `commands = ["/usr/local/bin/count_unique_users.sh"]` with `data_format = "value"` and `data_type = "integer"`.
-
-### 5. Telegraf `exec` Plugin Pipeline Errors
-**Cause:** Telegraf does not run commands in a shell. Using pipes (`|`) directly in the `command` string causes `unrecognized option` errors (e.g., `loginctl: unrecognized option '-u'`).
-**Fix:** Wrap the command in a shell script or use `bash -c "..."`.
-
-### 6. Grafana "No Results" for Kubernetes Metrics
+### 4. Grafana "No Results" for Kubernetes Metrics
 **Cause:** Incorrect data source configuration or querying the wrong time range.
 **Fix:**
 *   Verify that the Grafana data source is pointing to the correct bucket (`telegraf`).
