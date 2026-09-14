@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: telegraf
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: telegraf
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/stats", "nodes/proxy", "services", "endpoints", "pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/stats", "/stats/summary"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: telegraf
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: telegraf
+subjects:
+  - kind: ServiceAccount
+    name: telegraf
+    namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-config
+  namespace: monitoring
+data:
+  telegraf.conf: |+
+    [agent]
+      interval = "30s"
+      round_interval = true
+      metric_batch_size = 1000
+      metric_buffer_limit = 10000
+      collection_jitter = "0s"
+      flush_interval = "10s"
+      flush_jitter = "0s"
+      precision = ""
+      hostname = "$HOSTNAME"
+      omit_hostname = false
+
+    [[outputs.influxdb_v2]]
+      urls = ["http://host.minikube.internal:8086"]
+      token = "${INFLUXDB_TOKEN}"
+      organization = "${INFLUXDB_ORG}"
+      bucket = "telegraf"
+
+    [[inputs.kubernetes]]
+      url = "https://$HOSTIP:10250"
+      bearer_token = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+      insecure_skip_verify = true
+      fieldinclude = ["cpu_usage_nanocores", "memory_usage_bytes", "network_rx_bytes", "network_tx_bytes", "restart_count", "status_phase"]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: telegraf
+  namespace: monitoring
+  labels:
+    app: telegraf
+spec:
+  selector:
+    matchLabels:
+      app: telegraf
+  template:
+    metadata:
+      labels:
+        app: telegraf
+    spec:
+      serviceAccountName: telegraf
+      containers:
+      - name: telegraf
+        image: telegraf:latest
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        env:
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: HOSTIP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: KUBERNETES_SERVICE_HOST
+          value: "kubernetes.default.svc"
+        - name: KUBERNETES_SERVICE_PORT
+          value: "443"
+        - name: INFLUXDB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: telegraf-influxdb-secret
+              key: INFLUXDB_TOKEN
+        - name: INFLUXDB_ORG
+          valueFrom:
+            secretKeyRef:
+              name: telegraf-influxdb-secret
+              key: INFLUXDB_ORG
+        volumeMounts:
+        - name: telegraf-config
+          mountPath: /etc/telegraf/telegraf.conf
+          subPath: telegraf.conf
+      volumes:
+      - name: telegraf-config
+        configMap:
+          name: telegraf-config
