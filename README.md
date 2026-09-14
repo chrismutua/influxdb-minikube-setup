@@ -7,7 +7,7 @@ The architecture is designed to run entirely on a local machine without requirin
 ## 🏗️ Architecture
 
 *   **Telegraf**: Deployed as a Kubernetes `DaemonSet` inside the Minikube cluster. It runs on every node to collect Kubernetes metrics (CPU, memory, network) from the Kubelet API and sends them to InfluxDB.
-*   **InfluxDB**: Runs locally on the host machine (Kali Linux) and stores the metrics in a bucket named `telegraf`.
+*   **InfluxDB**: Runs locally on the host machine and stores the metrics in a bucket named `telegraf`.
 *   **Grafana**: Connects to InfluxDB to visualize the metrics.
 
 The Telegraf pods communicate with the host machine's InfluxDB using the Minikube internal DNS name `host.minikube.internal`.
@@ -101,7 +101,7 @@ kubectl exec -it <pod-name> -n monitoring -- telegraf --config /etc/telegraf/tel
 2.  Select your InfluxDB data source.
 3.  Change the **Query Language** from `Flux` to `InfluxQL`.
 4.  Fill in the authentication:
-    *   **User**: Your InfluxDB username (e.g., `<YOUR_USERNAME>`).
+    *   **User**: Your InfluxDB username.
     *   **Password**: Paste your **InfluxDB API Token** here (not your user password).
     *   **Database**: `telegraf`.
 5.  Click **Save & Test**.
@@ -136,7 +136,7 @@ influx v1 dbrp create \
 **Fix:** Replace `fieldpass` with `fieldinclude` in the `telegraf.conf` ConfigMap.
 
 ### 4. Missing `n_users` Metric (Host Machine Monitoring)
-**Cause:** Kali Linux (and modern Debian systems) no longer use `/var/run/utmp`. Telegraf's `system` plugin cannot read it.
+**Cause:** Some modern Linux distributions no longer use or populate `/var/run/utmp`. Telegraf's `system` plugin cannot read it.
 **Fix:** Use the `exec` plugin with `loginctl` or `who` to count unique logged-in users.
 *   *Script:* `loginctl list-sessions --no-legend | awk '{print $3}' | sort -u | wc -l`
 *   *Config:* Use `commands = ["/usr/local/bin/count_unique_users.sh"]` with `data_format = "value"` and `data_type = "integer"`.
