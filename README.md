@@ -72,17 +72,22 @@ kubectl create secret generic telegraf-influxdb-secret \
   -n monitoring
 ```
 
-### Step 4: Apply the Telegraf Manifest
+### Step 4: Apply the Telegraf Manifests
 
-Apply the `telegraf-daemonset.yaml` manifest to your cluster. This manifest creates:
-*   A `monitoring` namespace.
-*   A `ServiceAccount` and `ClusterRole` with permissions to read node stats and pod metrics.
-*   A `ConfigMap` containing the Telegraf configuration.
-*   A `DaemonSet` to run Telegraf on every node.
+The manifests live in `manifests/`, one Kubernetes object per file. Applying the directory creates:
+*   `manifests/namespace.yaml` — the `monitoring` Namespace everything else lives in.
+*   `manifests/serviceaccount.yaml` — the `telegraf` ServiceAccount the DaemonSet runs as.
+*   `manifests/clusterrole.yaml` — the `telegraf` ClusterRole, granting read access to nodes, pods, services, endpoints and namespaces, plus the Kubelet's `/metrics`, `/stats` and `/stats/summary` URLs.
+*   `manifests/clusterrolebinding.yaml` — the `telegraf` ClusterRoleBinding, which grants that ClusterRole to the ServiceAccount.
+*   `manifests/configmap.yaml` — the `telegraf-config` ConfigMap containing the Telegraf configuration.
+*   `manifests/daemonset.yaml` — the `telegraf` DaemonSet, which runs Telegraf on every node.
 
 ```bash
-kubectl apply -f telegraf-daemonset.yaml
+kubectl apply -f manifests/namespace.yaml
+kubectl apply -f manifests/
 ```
+
+*(The Namespace is applied first because `kubectl apply` reads a directory in filename order, which would otherwise place the namespaced objects ahead of the namespace they need.)*
 
 *(Note: the DaemonSet pins `telegraf:1.40.1` with `imagePullPolicy: IfNotPresent`. Bump that version deliberately rather than tracking `latest`, which can silently move the cluster onto a release that changes or removes configuration options.)*
 
@@ -108,10 +113,10 @@ kubectl exec -it <pod-name> -n monitoring -- telegraf --config /etc/telegraf/tel
 
 ### Step 6: Applying Configuration Changes
 
-Telegraf reads its configuration only at start-up, so editing the `ConfigMap` on its own has no effect. After changing `telegraf.conf` in the manifest, re-apply it and restart the DaemonSet:
+Telegraf reads its configuration only at start-up, so editing the `ConfigMap` on its own has no effect. After changing `telegraf.conf` in `manifests/configmap.yaml`, re-apply it and restart the DaemonSet:
 
 ```bash
-kubectl apply -f telegraf-daemonset.yaml
+kubectl apply -f manifests/configmap.yaml
 kubectl rollout restart daemonset/telegraf -n monitoring
 kubectl rollout status daemonset/telegraf -n monitoring
 ```
@@ -198,11 +203,11 @@ Prints the **server** version. Note that `influx version` prints the *CLI* versi
 **Cause:** The Minikube Kubelet rejects the Service Account token because it doesn't know how to validate it.
 **Fix:**
 1.  Restart Minikube with `--extra-config=kubelet.authentication-token-webhook=true`.
-2.  Ensure the `ClusterRole` includes `nodes/stats` in the `resources` list.
+2.  Ensure `manifests/clusterrole.yaml` includes `nodes/stats` in the `resources` list.
 
 ### 2. `403 Forbidden` on `/pods`
 **Cause:** The Telegraf ServiceAccount lacks permission to list pods via the Kubelet's proxy endpoint.
-**Fix:** Add `nodes/proxy` to the `resources` list in the `ClusterRole`.
+**Fix:** Add `nodes/proxy` to the `resources` list in `manifests/clusterrole.yaml`.
 
 ### 3. Telegraf `fieldpass` Deprecation Error
 **Cause:** Telegraf v1.40.0 removed the `fieldpass` option in favor of `fieldinclude`.

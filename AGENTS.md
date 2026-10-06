@@ -10,13 +10,33 @@ Telegraf runs as a Kubernetes DaemonSet and ships kubelet metrics to InfluxDB v2
 on the host machine; Grafana visualizes them. There is no application code, no
 build system, no test suite, and no CI.
 
-Three files are tracked:
+Eight files are tracked:
 
 | File | Purpose |
 | --- | --- |
 | `AGENTS.md` | Instructions for AI coding agents working in this repository (this file). |
 | `README.md` | The human-facing setup guide. The primary deliverable. |
-| `telegraf-daemonset.yaml` | One multi-document manifest: `Namespace`, `ServiceAccount`, `ClusterRole`, `ClusterRoleBinding`, `ConfigMap` (the Telegraf config), `DaemonSet`. |
+| `manifests/namespace.yaml` | The `monitoring` Namespace. |
+| `manifests/serviceaccount.yaml` | The `telegraf` ServiceAccount. |
+| `manifests/clusterrole.yaml` | The `telegraf` ClusterRole (node/pod read access and the Kubelet stats URLs). |
+| `manifests/clusterrolebinding.yaml` | The `telegraf` ClusterRoleBinding that grants the ClusterRole to the ServiceAccount. |
+| `manifests/configmap.yaml` | The `telegraf-config` ConfigMap holding `telegraf.conf`. |
+| `manifests/daemonset.yaml` | The `telegraf` DaemonSet (image pin, env from the Secret, config mount). |
+
+## Manifests: one object per file
+
+* `manifests/` holds **one Kubernetes API object per file**. Never reintroduce a
+  multi-document manifest: no file holds more than one object, and no file starts
+  with or contains a `---` separator.
+* The `Secret` is never a manifest — it is created imperatively (ground rule 1).
+* A new object means a new file, and the tracked-files table above, the README's
+  Step 4 inventory, and the verification checks below must be updated in the same
+  change.
+* `kubectl apply -f manifests/` reads the directory in filename order
+  (`clusterrole`, `clusterrolebinding`, `configmap`, `daemonset`, `namespace`,
+  `serviceaccount`), so the Namespace is applied last. On a cluster that does not
+  have `monitoring` yet, apply `manifests/namespace.yaml` first, as the README
+  does.
 
 ## Ground rules
 
@@ -27,8 +47,8 @@ Three files are tracked:
    inspection (`kubectl get`, `kubectl logs`, `influx query`) is encouraged.
    Applying manifests or restarting the DaemonSet needs explicit approval — an
    approved plan that names the command counts.
-3. **Keep edits small and scoped.** This repo is documentation plus one manifest;
-   avoid unrelated reformatting or reordering.
+3. **Keep edits small and scoped.** This repo is documentation plus a handful of
+   small manifests; avoid unrelated reformatting or reordering.
 4. **Match the existing README style:** emoji `##` section headings, `###`
    subsections, `*   ` bullets, fenced `bash`/`sql` blocks, `->` for UI paths.
 5. There is no `.gitignore`. Clean up any scratch files you create so they do not
@@ -72,7 +92,7 @@ Gotchas:
 * `memory_working_set_bytes` is the deliberate memory signal here; do not swap it
   back to `memory_usage_bytes` without being asked.
 * Telegraf does not hot-reload its config. A `ConfigMap` change requires both
-  `kubectl apply -f telegraf-daemonset.yaml` **and**
+  `kubectl apply -f manifests/configmap.yaml` **and**
   `kubectl rollout restart daemonset/telegraf -n monitoring`.
 
 ## Audience and scope
@@ -95,16 +115,25 @@ the Kubernetes Secret, the Telegraf DaemonSet, and the Grafana data source.
 No test suite exists. Before committing:
 
 ```bash
-# 1. The manifest still parses as YAML
-python3 -c "import yaml; list(yaml.safe_load_all(open('telegraf-daemonset.yaml')))"
+# 1. Every manifest is a single, parseable object
+python3 -c "
+import glob, yaml
+for p in sorted(glob.glob('manifests/*.yaml')):
+    docs = [d for d in yaml.safe_load_all(open(p)) if d]
+    assert len(docs) == 1, (p, len(docs))
+    print(p, docs[0]['kind'], docs[0]['metadata']['name'])
+"
 
 # 2. Markdown fences are balanced (expect an even number)
 for f in README.md AGENTS.md; do printf '%s: ' "$f"; awk '/^```/{n++} END{print n}' "$f"; done
 
 # 3. The embedded Telegraf config is valid TOML
-python3 -c "import yaml,tomllib; d=[x for x in yaml.safe_load_all(open('telegraf-daemonset.yaml')) if x and x['kind']=='ConfigMap'][0]; tomllib.loads(d['data']['telegraf.conf'])"
+python3 -c "import yaml,tomllib; d=[x for x in yaml.safe_load_all(open('manifests/configmap.yaml')) if x and x['kind']=='ConfigMap'][0]; tomllib.loads(d['data']['telegraf.conf'])"
 
-# 4. The diff contains only what you intended
+# 4. The live cluster would be unchanged by the manifests (read-only, applies nothing)
+kubectl apply --dry-run=client -f manifests/
+
+# 5. The diff contains only what you intended
 git diff --stat && git diff
 ```
 
@@ -202,7 +231,6 @@ Rules:
 
 Listed so you do not mistake them for intent. Fix only when asked:
 
-1. README Step 3 creates the Secret in a namespace that Step 4's manifest creates.
+1. README Step 3 creates the Secret in a namespace that Step 4's manifests create.
 2. README Troubleshooting §4 still suggests temporarily commenting out
    `fieldinclude`, which removes all filtering and risks high cardinality.
-3. README Step 4's list of created resources omits the `ClusterRoleBinding`.
