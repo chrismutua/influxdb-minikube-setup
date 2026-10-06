@@ -103,6 +103,36 @@ To visualize the metrics, you need to add InfluxDB as a data source in Grafana.
 
 Once the data source is connected, you can build dashboards using your preferred query language (Flux or InfluxQL) to visualize the Kubernetes metrics collected by Telegraf.
 
+### 📈 Example Queries (InfluxQL)
+
+These examples are written in **InfluxQL**, so set the data source's **Query Language** to `InfluxQL` (not `Flux`) before using them. They query the `kubernetes_pod_container` measurement collected by Telegraf and rely on a dashboard variable named `$Pods` (a query variable on `pod_name`), so replace `argo-cd` with your own namespace and select your pods in the dashboard before running them.
+
+**CPU usage (millicores)**
+
+```sql
+SELECT mean("cpu_usage_nanocores"::float) / 1000000
+FROM "kubernetes_pod_container"
+WHERE ("namespace" = 'argo-cd' AND "pod_name" =~ /^($Pods)$/)
+AND $timeFilter
+GROUP BY time(1m), "pod_name"::tag
+```
+
+*   **Unit:** Custom units -> `mCPU` (nanocores divided by 1,000,000).
+*   **Alias by:** `$tag_pod_name`
+
+**Memory working set (MiB)**
+
+```sql
+SELECT mean("memory_working_set_bytes"::float) / 1048576
+FROM "kubernetes_pod_container"
+WHERE ("namespace" = 'argo-cd' AND "pod_name" =~ /^($Pods)$/)
+AND $timeFilter
+GROUP BY time(1m), "pod_name"::tag
+```
+
+*   **Unit:** Custom units -> `MiB` (bytes divided by 1,048,576).
+*   **Alias by:** `$tag_pod_name`
+
 ---
 
 ## 🛠️ Troubleshooting Guide (What We Learned)
