@@ -62,7 +62,21 @@ data:
       url = "https://$HOSTIP:10250"
       bearer_token = "/var/run/secrets/kubernetes.io/serviceaccount/token"
       insecure_skip_verify = true
-      fieldinclude = ["cpu_usage_nanocores", "memory_working_set_bytes", "network_rx_bytes", "network_tx_bytes", "restart_count", "status_phase"]
+      ## fieldinclude is a modifier: only the listed fields are kept, and a metric
+      ## whose fields are all filtered out is discarded entirely. Field names are
+      ## per-measurement; node network is network_*_bytes while pod network is
+      ## rx_bytes/tx_bytes.
+      fieldinclude = [
+        "cpu_usage_nanocores",       # kubernetes_node, kubernetes_pod_container, kubernetes_system_container
+        "memory_working_set_bytes",  # kubernetes_node, kubernetes_pod_container, kubernetes_system_container
+        "network_rx_bytes",          # kubernetes_node
+        "network_tx_bytes",          # kubernetes_node
+        "rx_bytes",                  # kubernetes_pod_network
+        "tx_bytes",                  # kubernetes_pod_network
+        "available_bytes",           # kubernetes_pod_volume
+        "capacity_bytes",            # kubernetes_pod_volume
+        "used_bytes",                # kubernetes_pod_volume
+      ]
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -83,7 +97,8 @@ spec:
       serviceAccountName: telegraf
       containers:
       - name: telegraf
-        image: telegraf:latest
+        image: telegraf:1.40.1
+        imagePullPolicy: IfNotPresent
         resources:
           limits:
             memory: 256Mi
