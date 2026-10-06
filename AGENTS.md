@@ -10,10 +10,11 @@ Telegraf runs as a Kubernetes DaemonSet and ships kubelet metrics to InfluxDB v2
 on the host machine; Grafana visualizes them. There is no application code, no
 build system, no test suite, and no CI.
 
-Only two files are tracked:
+Three files are tracked:
 
 | File | Purpose |
 | --- | --- |
+| `AGENTS.md` | Instructions for AI coding agents working in this repository (this file). |
 | `README.md` | The human-facing setup guide. The primary deliverable. |
 | `telegraf-daemonset.yaml` | One multi-document manifest: `Namespace`, `ServiceAccount`, `ClusterRole`, `ClusterRoleBinding`, `ConfigMap` (the Telegraf config), `DaemonSet`. |
 
