@@ -40,11 +40,28 @@ minikube start --extra-config=kubelet.authentication-token-webhook=true
 
 1.  Ensure InfluxDB is running on your host machine.
 2.  Create an organization (e.g., `<YOUR_INFLUXDB_ORG>`) and a bucket named `telegraf`.
-3.  Generate an **API Token** with **Write** permissions for the `telegraf` bucket. You will need this for the next step.
+3.  Generate an **API Token** with **Write** permissions for the `telegraf` bucket. You will need this for the next step. For Grafana you will also need a token with **Read** access (see the Grafana Configuration section).
+4.  InfluxQL (which the Grafana data source uses) addresses a bucket as a *database*. InfluxDB v2 provides that through a **DBRP mapping**. Check whether one exists:
+
+    ```bash
+    influx v1 dbrp list --org <YOUR_INFLUXDB_ORG> --token <YOUR_INFLUXDB_TOKEN>
+    ```
+
+    If `telegraf` is not listed, create the mapping — take the bucket ID from `influx bucket list`:
+
+    ```bash
+    influx v1 dbrp create \
+      --bucket-id <YOUR_BUCKET_ID> \
+      --db telegraf \
+      --rp autogen \
+      --default \
+      --org <YOUR_INFLUXDB_ORG> \
+      --token <YOUR_INFLUXDB_TOKEN>
+    ```
 
 ### Step 3: Create the Kubernetes Secret
 
-To avoid hardcoding sensitive credentials in the manifest (making it safe to commit to Git), we store the InfluxDB token and organization in a Kubernetes Secret.
+To avoid hardcoding sensitive credentials in the manifest, the InfluxDB token and organization are stored in a Kubernetes Secret and injected into the DaemonSet as environment variables.
 
 Run the following command in your terminal, replacing `<YOUR_INFLUXDB_TOKEN>` and `<YOUR_INFLUXDB_ORG>` with your actual values:
 
@@ -171,7 +188,7 @@ influxd version
 ```
 Prints the **server** version. Note that `influx version` prints the *CLI* version instead, which can differ.
 
-**Why InfluxQL works on v2:** Grafana's InfluxQL mode uses the v1-compatibility `/query` endpoint that InfluxDB v2 still provides. Your bucket is reachable under a database name through a **DBRP mapping** (the `telegraf` bucket is mapped to the `telegraf`/`autogen` database). If a query ever reports that the database does not exist, create the mapping with `influx v1 dbrp create`.
+**Why InfluxQL works on v2:** Grafana's InfluxQL mode uses the v1-compatibility `/query` endpoint that InfluxDB v2 still provides, addressing the bucket through the **DBRP mapping** created in Step 2.
 
 ---
 
@@ -202,6 +219,6 @@ Prints the **server** version. Note that `influx version` prints the *CLI* versi
 
 ---
 
-## 🔐 Security Note for GitOps
+## 🔐 Security Note
 
 This setup uses a standard Kubernetes Secret for local testing. **Base64 is not encryption.** If you commit a standard Secret manifest to GitHub, your token is exposed.
