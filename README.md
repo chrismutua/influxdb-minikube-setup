@@ -103,17 +103,24 @@ kubectl rollout status daemonset/telegraf -n monitoring
 
 ## 📊 Grafana Configuration
 
-To visualize the metrics, you need to add InfluxDB as a data source in Grafana. 
+The stack stores its metrics in InfluxDB v2, and these instructions use **InfluxQL**. Add the data source from **Connections -> Data Sources -> InfluxDB**, then configure it as follows:
 
-1.  Go to **Connections -> Data Sources** in Grafana.
-2.  Select **InfluxDB**.
-3.  Configure the connection settings:
-    *   **URL**: `http://localhost:8086` (or the address where InfluxDB is running).
-    *   **Authentication**: Ensure the token or credentials used have **Read** permissions for the `telegraf` bucket.
-    *   **Database/Bucket**: `telegraf`.
-4.  Click **Save & Test**.
+| Setting | Value | Why |
+| --- | --- | --- |
+| **Query language** | `InfluxQL` | Selects InfluxDB's v1-compatibility `/query` endpoint. |
+| **URL** | `http://localhost:8086` | InfluxDB host and port. The access method is **Server**, so Grafana's backend must be able to reach this address. |
+| **Custom HTTP header** (under *Advanced HTTP Settings*) | `Authorization` = `Token <YOUR_INFLUXDB_TOKEN>` | The word `Token`, a space, then your API token. This is how InfluxDB v2 authenticates. |
+| **Basic auth** | leave **off** | InfluxDB v2 has no usernames or passwords, only tokens. |
+| **Database** (under *InfluxDB Details*) | `telegraf` | The bucket, addressed as a database through a DBRP mapping. |
+| **User** / **Password** (under *InfluxDB Details*) | leave **empty** | These apply to InfluxDB 1.x only. |
+| **HTTP Method** | `POST` | Grafana's default; POST allows larger queries that GET would reject. |
+| **Min time interval** | `30s` | Matches the Telegraf `interval`, so each write lands in its own group. |
 
-Once the data source is connected, you can build dashboards using your preferred query language (Flux or InfluxQL) to visualize the Kubernetes metrics collected by Telegraf.
+Leave **Skip TLS Verify**, **TLS Client Auth** and **With CA Cert** off — this is plain HTTP on localhost.
+
+Click **Save & Test**. A working InfluxQL data source reports *"datasource is working. N measurements found."*
+
+*(The token only needs **Read** access to the `telegraf` bucket. The DaemonSet uses a write token, so for least privilege create a separate read-only token for Grafana under **InfluxDB UI -> Data -> API Tokens -> Generate API Token**, restricted to the `telegraf` bucket with **Read**.)*
 
 ### 📈 Example Queries (InfluxQL)
 
@@ -145,6 +152,27 @@ GROUP BY time(1m), "pod_name"::tag
 *   **Unit:** Custom units -> `MiB` (bytes divided by 1,048,576).
 *   **Alias by:** `$tag_pod_name`
 
+### 🔎 Confirming You Are on InfluxDB v2
+
+InfluxQL works against both InfluxDB 1.x and 2.x, so it is worth confirming which version is running:
+
+```bash
+curl -s http://localhost:8086/health
+```
+A v2 instance reports its version, for example `"version": "v2.9.1"`.
+
+```bash
+curl -sI http://localhost:8086/ping
+```
+v2 answers with `X-Influxdb-Version: v2.x.x` and `X-Influxdb-Build: OSS`.
+
+```bash
+influxd version
+```
+Prints the **server** version. Note that `influx version` prints the *CLI* version instead, which can differ.
+
+**Why InfluxQL works on v2:** Grafana's InfluxQL mode uses the v1-compatibility `/query` endpoint that InfluxDB v2 still provides. Your bucket is reachable under a database name through a **DBRP mapping** (the `telegraf` bucket is mapped to the `telegraf`/`autogen` database). If a query ever reports that the database does not exist, create the mapping with `influx v1 dbrp create`.
+
 ---
 
 ## 🛠️ Troubleshooting Guide (What We Learned)
@@ -168,6 +196,7 @@ GROUP BY time(1m), "pod_name"::tag
 **Cause:** Incorrect data source configuration or querying the wrong time range.
 **Fix:**
 *   Verify that the Grafana data source is pointing to the correct bucket (`telegraf`).
+*   Confirm the data source actually authenticates — **Save & Test** should report *"datasource is working. N measurements found."*
 *   Check that the dashboard's time range covers a period when Telegraf was actively collecting and sending data.
 *   Temporarily comment out the `fieldinclude` option in the Telegraf ConfigMap to ensure all metrics are flowing without filtering.
 
