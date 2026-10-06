@@ -148,9 +148,14 @@ curl -sS https://raw.githubusercontent.com/influxdata/telegraf/v1.40.0/plugins/i
 ## Git workflow: PR-less fast-forward (required)
 
 Every change lands on `main` through a short-lived branch and a **fast-forward
-merge**. No pull requests, no merge commits.
+merge**. No pull requests, no merge commits. **Pushes go over HTTPS only** — the
+`origin` remote is SSH and is used for reads (`git fetch`, `git status`), never as
+a push target.
 
 ```bash
+# Pushes use the HTTPS URL explicitly; `origin` is SSH and must not be pushed to.
+HTTPS=https://github.com/chrismutua/influxdb-minikube-setup.git
+
 # 1. Start from an up-to-date main and confirm it is level with the remote
 git fetch origin
 git rev-list --left-right --count main...origin/main   # must print: 0	0
@@ -162,15 +167,16 @@ git switch -c add-something
 git add <files>
 git commit -m "Short imperative summary"
 
-# 4. Publish the branch
-git push -u origin add-something
+# 4. Publish the branch over HTTPS
+git push -u "$HTTPS" add-something
 
 # 5. Fast-forward main
 git switch main
 git merge --ff-only add-something
 
-# 6. Publish main and confirm both ends agree
-git push origin main
+# 6. Publish main over HTTPS and confirm both ends agree
+git push "$HTTPS" main
+git fetch origin                                       # refresh the SSH tracking ref
 git status -sb
 git rev-list --left-right --count main...origin/main   # must print: 0	0
 ```
@@ -183,6 +189,13 @@ Rules:
   retry.
 * Never force-push, never rewrite published history, and never commit directly to
   `main` and push without the branch step.
+* Push over **HTTPS only** — use the explicit HTTPS URL above, never the SSH
+  `origin` remote, and never wrap a push in `GIT_SSH_COMMAND`. If git suggests
+  `--set-upstream origin <branch>`, ignore it: that resolves to SSH.
+* If a push is rejected for authentication, run `gh auth status`, report the
+  output, and stop. Do not switch transports to make it work.
+* Pushing to a URL does not move `origin/main`, so run `git fetch origin` before
+  the closing `git rev-list` check.
 * Leave the merged branch in place; the maintainer deletes branches.
 
 ## Commit messages
@@ -214,18 +227,18 @@ Rules:
   `minikube image load telegraf:<version>` — or, when that digest is already
   cached under another tag,
   `minikube image tag docker.io/library/telegraf:latest docker.io/library/telegraf:<version>`.
-* On this machine plain `git fetch` / `git push` can fail with
-  `Bad owner or permissions on /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf`.
-  The cause is that file being a symlink owned by `nobody:nogroup`, which makes
-  SSH reject the whole system config. Work around it per-command, without editing
-  any config file:
+* Pushes go over HTTPS. The `origin` remote is SSH (`git@github.com:`) for the
+  maintainer's reads and is never a push target. HTTPS credentials come from the
+  `gh` CLI (2.102.0, installed) via `gh auth`:
 
   ```bash
-  GIT_SSH_COMMAND="ssh -F $HOME/.ssh/config" git push origin main
+  gh auth login          # human step: needs a browser and a one-time device code
+  gh auth setup-git      # wires gh in as the credential helper for github.com
   ```
 
-  The durable fix is a system-level permission fix on that file; do not attempt
-  it unprompted.
+  Never paste a token into a tracked file, and never record one in `.git/config`.
+  In an agent session, prefix pushes with `GIT_TERMINAL_PROMPT=0` so a missing
+  credential fails fast instead of prompting.
 
 ## Known issues (not yet fixed)
 
