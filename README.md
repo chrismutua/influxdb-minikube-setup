@@ -116,7 +116,7 @@ The stack stores its metrics in InfluxDB v2, and these instructions use **Influx
 | **HTTP Method** | `POST` | Grafana's default; POST allows larger queries that GET would reject. |
 | **Min time interval** | `30s` | Matches the Telegraf `interval`, so each write lands in its own group. |
 
-Leave **Skip TLS Verify**, **TLS Client Auth** and **With CA Cert** off — this is plain HTTP on localhost.
+Leave **Skip TLS Verify**, **TLS Client Auth** and **With CA Cert** off — this is a local test setup talking plain HTTP, so no certificates are needed.
 
 Click **Save & Test**. A working InfluxQL data source reports *"datasource is working. N measurements found."*
 
