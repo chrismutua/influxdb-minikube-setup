@@ -1,0 +1,10 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: telegraf
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/stats", "nodes/proxy", "services", "endpoints", "pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/stats", "/stats/summary"]
+    verbs: ["get"]
