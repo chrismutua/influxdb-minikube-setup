@@ -149,6 +149,9 @@ Rules:
   `http://localhost:3000`.
 * In-cluster Telegraf may run a different patch release than the host binary
   (observed: cluster 1.40.1, host 1.40.0).
+* The DaemonSet pins `telegraf:1.40.1` with `imagePullPolicy: IfNotPresent`. Bump
+  the version deliberately instead of tracking `latest`; the `latest` tag is what
+  silently moved the cluster onto a release that removed `fieldpass`.
 * On this machine plain `git fetch` / `git push` can fail with
   `Bad owner or permissions on /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf`.
   Work around it per-command, without editing any config file:
@@ -164,9 +167,4 @@ Rules:
 
 Listed so you do not mistake them for intent. Fix only when asked:
 
-1. `fieldinclude` in `telegraf-daemonset.yaml` omits `rx_bytes` / `tx_bytes` and
-   the pod-volume fields, so `kubernetes_pod_network` and `kubernetes_pod_volume`
-   have received no data since 2026-09-14.
-2. `restart_count` and `status_phase` in `fieldinclude` are dead entries.
-3. README Step 3 creates the Secret in a namespace that Step 4's manifest creates.
-4. The DaemonSet uses `telegraf:latest`, so the running version drifts.
+1. README Step 3 creates the Secret in a namespace that Step 4's manifest creates.

@@ -67,6 +67,8 @@ Apply the `telegraf-daemonset.yaml` manifest to your cluster. This manifest crea
 kubectl apply -f telegraf-daemonset.yaml
 ```
 
+*(Note: the DaemonSet pins `telegraf:1.40.1` with `imagePullPolicy: IfNotPresent`. Bump that version deliberately rather than tracking `latest`, which can silently move the cluster onto a release that changes or removes configuration options.)*
+
 ### Step 5: Verify the Deployment
 
 Check that the Telegraf pods are running:
@@ -85,6 +87,16 @@ To see exactly what metrics Telegraf is generating, run it in test mode inside t
 
 ```bash
 kubectl exec -it <pod-name> -n monitoring -- telegraf --config /etc/telegraf/telegraf.conf --test --input-filter kubernetes
+```
+
+### Step 6: Applying Configuration Changes
+
+Telegraf reads its configuration only at start-up, so editing the `ConfigMap` on its own has no effect. After changing `telegraf.conf` in the manifest, re-apply it and restart the DaemonSet:
+
+```bash
+kubectl apply -f telegraf-daemonset.yaml
+kubectl rollout restart daemonset/telegraf -n monitoring
+kubectl rollout status daemonset/telegraf -n monitoring
 ```
 
 ---
@@ -150,6 +162,7 @@ GROUP BY time(1m), "pod_name"::tag
 ### 3. Telegraf `fieldpass` Deprecation Error
 **Cause:** Telegraf v1.40.0 removed the `fieldpass` option in favor of `fieldinclude`.
 **Fix:** Replace `fieldpass` with `fieldinclude` in the `telegraf.conf` ConfigMap.
+*(The DaemonSet now pins `telegraf:1.40.1`, so an unannounced version bump can no longer reintroduce this class of breakage.)*
 
 ### 4. Grafana "No Results" for Kubernetes Metrics
 **Cause:** Incorrect data source configuration or querying the wrong time range.
