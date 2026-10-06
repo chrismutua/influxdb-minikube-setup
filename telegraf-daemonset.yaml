@@ -62,7 +62,7 @@ data:
       url = "https://$HOSTIP:10250"
       bearer_token = "/var/run/secrets/kubernetes.io/serviceaccount/token"
       insecure_skip_verify = true
-      fieldinclude = ["cpu_usage_nanocores", "memory_usage_bytes", "network_rx_bytes", "network_tx_bytes", "restart_count", "status_phase"]
+      fieldinclude = ["cpu_usage_nanocores", "memory_working_set_bytes", "network_rx_bytes", "network_tx_bytes", "restart_count", "status_phase"]
 ---
 apiVersion: apps/v1
 kind: DaemonSet
