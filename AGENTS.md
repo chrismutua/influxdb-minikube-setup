@@ -24,14 +24,26 @@ Three files are tracked:
    Secret created imperatively via `kubectl create secret`. Base64 is not
    encryption.
 2. **Do not mutate the live Minikube cluster unless explicitly asked.** Read-only
-   inspection (`kubectl get`, `kubectl logs`, `influx query`) is encouraged; the
-   maintainer applies manifests themselves.
+   inspection (`kubectl get`, `kubectl logs`, `influx query`) is encouraged.
+   Applying manifests or restarting the DaemonSet needs explicit approval — an
+   approved plan that names the command counts.
 3. **Keep edits small and scoped.** This repo is documentation plus one manifest;
    avoid unrelated reformatting or reordering.
 4. **Match the existing README style:** emoji `##` section headings, `###`
    subsections, `*   ` bullets, fenced `bash`/`sql` blocks, `->` for UI paths.
 5. There is no `.gitignore`. Clean up any scratch files you create so they do not
    show up as untracked noise.
+
+## Plan first, change only on approval
+
+* When the session is in **plan mode**, the only permitted actions are reads and
+  presenting the plan. Do not edit, create, commit, or push anything.
+* A conversational "looks good", an answer to a question, or an amendment is
+  **not** approval. Fold the feedback into the plan and present it again.
+* Treat the session mode as authoritative. If you cannot tell whether plan mode
+  is active, assume it is and ask.
+* Never push to a remote until the change itself has been approved. The git
+  workflow below starts only after that.
 
 ## Metric filtering is the sharp edge
 
@@ -63,11 +75,20 @@ Gotchas:
   `kubectl apply -f telegraf-daemonset.yaml` **and**
   `kubectl rollout restart daemonset/telegraf -n monitoring`.
 
-## Deliberate omissions — do not "fix" silently
+## Audience and scope
 
-* The README once documented DBRP setup and a Flux-vs-InfluxQL comparison; both
-  were removed on purpose. Ask before re-adding.
-* ArgoCD and GitOps references were removed on purpose.
+The README is written for someone setting up the whole stack from scratch on a
+local Minikube host: InfluxDB v2 (organization, bucket, tokens, DBRP mapping),
+the Kubernetes Secret, the Telegraf DaemonSet, and the Grafana data source.
+
+* Keep it self-contained. Assume no prior context, no existing InfluxDB data,
+  and no knowledge of how this repository evolved.
+* Document what a working setup requires — never present a step as optional or
+  omitted because of the repository's history.
+* Include exact commands and the expected result wherever it helps the reader
+  confirm they are on track.
+* The data source instructions use **InfluxQL**. If Flux guidance is ever added,
+  present it as a clearly-labelled alternative, not a replacement.
 
 ## Verifying a change
 
@@ -78,9 +99,12 @@ No test suite exists. Before committing:
 python3 -c "import yaml; list(yaml.safe_load_all(open('telegraf-daemonset.yaml')))"
 
 # 2. Markdown fences are balanced (expect an even number)
-awk '/^```/{n++} END{print n}' README.md
+for f in README.md AGENTS.md; do printf '%s: ' "$f"; awk '/^```/{n++} END{print n}' "$f"; done
 
-# 3. The diff contains only what you intended
+# 3. The embedded Telegraf config is valid TOML
+python3 -c "import yaml,tomllib; d=[x for x in yaml.safe_load_all(open('telegraf-daemonset.yaml')) if x and x['kind']=='ConfigMap'][0]; tomllib.loads(d['data']['telegraf.conf'])"
+
+# 4. The diff contains only what you intended
 git diff --stat && git diff
 ```
 
@@ -150,11 +174,22 @@ Rules:
 * In-cluster Telegraf may run a different patch release than the host binary
   (observed: cluster 1.40.1, host 1.40.0).
 * The DaemonSet pins `telegraf:1.40.1` with `imagePullPolicy: IfNotPresent`. Bump
-  the version deliberately instead of tracking `latest`; the `latest` tag is what
-  silently moved the cluster onto a release that removed `fieldpass`.
+  the version deliberately: Telegraf removes deprecated options over time (for
+  example `fieldpass` was replaced by `fieldinclude`), so tracking `latest` can
+  break a working configuration without any change to this repository.
+* Verified versions: InfluxDB v2.9.1 (systemd unit `influxdb.service`), Grafana
+  13.2.2, Telegraf 1.40.1 in-cluster.
+* The Minikube node may be unable to reach Docker Hub (DNS lookups fail with
+  `server misbehaving`), so pulling a *new* image tag fails with `ErrImagePull` /
+  `ImagePullBackOff`. If a version bump stalls the rollout, load it locally:
+  `minikube image load telegraf:<version>` — or, when that digest is already
+  cached under another tag,
+  `minikube image tag docker.io/library/telegraf:latest docker.io/library/telegraf:<version>`.
 * On this machine plain `git fetch` / `git push` can fail with
   `Bad owner or permissions on /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf`.
-  Work around it per-command, without editing any config file:
+  The cause is that file being a symlink owned by `nobody:nogroup`, which makes
+  SSH reject the whole system config. Work around it per-command, without editing
+  any config file:
 
   ```bash
   GIT_SSH_COMMAND="ssh -F $HOME/.ssh/config" git push origin main
@@ -168,3 +203,6 @@ Rules:
 Listed so you do not mistake them for intent. Fix only when asked:
 
 1. README Step 3 creates the Secret in a namespace that Step 4's manifest creates.
+2. README Troubleshooting §4 still suggests temporarily commenting out
+   `fieldinclude`, which removes all filtering and risks high cardinality.
+3. README Step 4's list of created resources omits the `ClusterRoleBinding`.
