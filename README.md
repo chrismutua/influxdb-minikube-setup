@@ -146,14 +146,32 @@ Click **Save & Test**. A working InfluxQL data source reports *"datasource is wo
 
 ### 📈 Example Queries (InfluxQL)
 
-These examples are written in **InfluxQL**, so set the data source's **Query Language** to `InfluxQL` (not `Flux`) before using them. They query the `kubernetes_pod_container` measurement collected by Telegraf and rely on a dashboard variable named `$Pods` (a query variable on `pod_name`), so replace `argo-cd` with your own namespace and select your pods in the dashboard before running them.
+These examples are written in **InfluxQL**, so set the data source's **Query Language** to `InfluxQL` (not `Flux`) before using them. They query the `kubernetes_pod_container` measurement collected by Telegraf and filter on two dependent dashboard variables, `$Namespaces` and `$Pods`.
+
+**Variable: `$Namespaces`**
+
+Lists every namespace with running containers. Under **Dashboard settings -> Variables -> New variable**, set **Type** to `Query`, select your InfluxDB data source, and enter:
+
+```sql
+SHOW TAG VALUES FROM "kubernetes_pod_container" WITH KEY = "namespace"
+```
+
+**Variable: `$Pods`**
+
+Lists the pods in the selected namespaces. Because this query references `$Namespaces`, it re-runs whenever that selection changes, so the drop-down only ever offers pods belonging to the chosen namespaces:
+
+```sql
+SHOW TAG VALUES FROM "kubernetes_pod_container" WITH KEY = "pod_name" WHERE "namespace" =~ /^($Namespaces)$/
+```
+
+Enable **Multi-value** and **Include All option** on both variables, then expand **Preview of values** in the variable editor to confirm the lists before saving.
 
 **CPU usage (millicores)**
 
 ```sql
 SELECT mean("cpu_usage_nanocores"::float) / 1000000
 FROM "kubernetes_pod_container"
-WHERE ("namespace" = 'argo-cd' AND "pod_name" =~ /^($Pods)$/)
+WHERE ("namespace" =~ /^($Namespaces)$/ AND "pod_name" =~ /^($Pods)$/)
 AND $timeFilter
 GROUP BY time(1m), "pod_name"::tag
 ```
@@ -166,13 +184,15 @@ GROUP BY time(1m), "pod_name"::tag
 ```sql
 SELECT mean("memory_working_set_bytes"::float) / 1048576
 FROM "kubernetes_pod_container"
-WHERE ("namespace" = 'argo-cd' AND "pod_name" =~ /^($Pods)$/)
+WHERE ("namespace" =~ /^($Namespaces)$/ AND "pod_name" =~ /^($Pods)$/)
 AND $timeFilter
 GROUP BY time(1m), "pod_name"::tag
 ```
 
 *   **Unit:** Custom units -> `MiB` (bytes divided by 1,048,576).
 *   **Alias by:** `$tag_pod_name`
+
+Both panels match the tags with `=~` and a regular expression because the variables are multi-value: Grafana interpolates a multi-value selection as a `|`-joined regular expression, so matching with plain `=` would produce a comma-separated string that matches nothing. Keep the parentheses around the variable.
 
 ### 🔎 Confirming You Are on InfluxDB v2
 
